@@ -25,6 +25,15 @@ public class UiController : MonoBehaviour
     private bool trackerAvailable;
     private float logTimer;
 
+    [Header("시선 커서")]
+    /// Canvas 위에 움직일 UI 오브젝트 (UI Image 등)
+    public RectTransform gazeCursor;
+
+    [Header("영향 대상 UI 리스트")]
+    public List<RectTransform> uiTargets = new List<RectTransform>();
+    [Header("영향 반경 (픽셀)")]
+    public float influenceRadius = 50f;
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -118,41 +127,50 @@ public class UiController : MonoBehaviour
 
     private void ProcessGaze(GazePoint gaze)
     {
-        Vector2 pos = new Vector2(gaze.X * Screen.width, (1f - gaze.Y) * Screen.height);
+        // ── 수정된 부분: 정규화된 gaze(0~1)를 800×600 좌표계로 매핑
+        float mappedX = gaze.X * 400f;
+        float mappedY = gaze.Y * 300f;
+        Vector2 pos = new Vector2(mappedX, mappedY);
+
+        // 시선 커서가 있으면 해당 좌표로 이동
+        if (gazeCursor != null)
+        {
+            // Canvas 로컬 좌표로 변환 없이 바로 앵커드 포지션에 할당
+            gazeCursor.anchoredPosition = pos;
+        }
+
+        // ── 이하 기존 로직 유지 ──
         logTimer += Time.unscaledDeltaTime;
         if (logTimer >= 1f)
         {
             logTimer = 0f;
-            Debug.Log($"[Gaze] norm=({gaze.X:F3},{gaze.Y:F3}) px=({pos.x:F0},{pos.y:F0})");
+            Debug.Log($"[Gaze] norm=({gaze.X:F3},{gaze.Y:F3}) → mapped px=({pos.x:F0},{pos.y:F0})");
         }
 
-        var results = new List<RaycastResult>();
-        raycaster.Raycast(new PointerEventData(EventSystem.current) { position = pos }, results);
-        var hits = new HashSet<GameObject>();
-        foreach (var rr in results)
+        // UI Raycast & 확대/축소 등…
+        // (필요하다면 raycaster.Raycast에 사용할 포지션도 pos로 교체)
+        foreach (var target in uiTargets)
         {
-            var go = rr.gameObject;
-            hits.Add(go);
-            if (!_slots.TryGetValue(go, out var slot))
-            {
-                slot = new Slot { rt = go.GetComponent<RectTransform>(), baseScale = go.transform.localScale };
-                _slots[go] = slot;
-            }
-            if (slot.gazeEnterTime < 0f)
-                slot.gazeEnterTime = Time.unscaledTime;
+            if (target == null)
+                continue;
 
-            float t = Time.unscaledTime - slot.gazeEnterTime;
-            float goal = t >= dwellTime ? focusScale : 1f;
-            slot.curScale = Mathf.Lerp(slot.curScale, goal, Time.unscaledDeltaTime * lerpSpeed);
-            slot.rt.localScale = slot.baseScale * slot.curScale;
-        }
-        foreach (var kv in _slots)
-        {
-            if (hits.Contains(kv.Key)) continue;
-            var slot = kv.Value;
-            slot.gazeEnterTime = -1f;
-            slot.curScale = Mathf.Lerp(slot.curScale, 1f, Time.unscaledDeltaTime * lerpSpeed);
-            slot.rt.localScale = slot.baseScale * slot.curScale;
+            // RectTransform의 월드 좌표를 화면 좌표로 변환 (Overlay 모드일 때 카메라 파라미터는 무시됨)
+            Vector2 targetScreenPos = RectTransformUtility.WorldToScreenPoint(null, target.position);
+
+            // 시선과 대상 간 거리 계산
+            float dist = Vector2.Distance(pos, targetScreenPos);
+            Debug.Log(dist);
+
+            // 반경 이내면 focusScale, 아니면 1
+            float goalScale = dist <= influenceRadius ? focusScale : 1f;
+
+            // 부드러운 크기 보간
+            Vector3 baseScale = target.localScale;
+            target.localScale = Vector3.Lerp(
+                target.localScale,
+                baseScale * goalScale,
+                Time.deltaTime * lerpSpeed
+            );
         }
     }
 
