@@ -16,11 +16,15 @@ public class UiController : MonoBehaviour
     [Header("필수 레퍼런스")]
     public GraphicRaycaster raycaster;
     public Camera canvasCamera;
+    public EventSystem eventSystem;
 
     [Header("시선 반응 파라미터")]
-    [Range(1f, 3f)] public float focusScale = 1.2f;
-    [Range(.01f, .5f)] public float dwellTime = .15f;
-    public float lerpSpeed = 15f;
+    public float focusScale = 2f;
+    public float stayTime = 0.15f;
+    public float lerpSpeed = 5f;
+
+    private Dictionary<GameObject, float> gazeStayTimers = new();
+    private HashSet<GameObject> currentlyFocused = new();
 
     private bool trackerAvailable;
     private float logTimer;
@@ -29,10 +33,10 @@ public class UiController : MonoBehaviour
     /// Canvas 위에 움직일 UI 오브젝트 (UI Image 등)
     public RectTransform gazeCursor;
 
-    [Header("영향 대상 UI 리스트")]
+    [Header("감지 대상 UI 리스트")]
     public List<RectTransform> uiTargets = new List<RectTransform>();
-    [Header("영향 반경 (픽셀)")]
-    public float influenceRadius = 50f;
+    [Header("감지 반경")]
+    public float detectionRadius = 50f;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -129,14 +133,14 @@ public class UiController : MonoBehaviour
     {
         // ── 수정된 부분: 정규화된 gaze(0~1)를 800×600 좌표계로 매핑
         float mappedX = gaze.X * 400f;
-        float mappedY = gaze.Y * 300f;
-        Vector2 pos = new Vector2(mappedX, mappedY);
+        float mappedY = gaze.Y * 225f;
+        Vector2 screenPos = new Vector2(mappedX, mappedY);
 
         // 시선 커서가 있으면 해당 좌표로 이동
         if (gazeCursor != null)
         {
             // Canvas 로컬 좌표로 변환 없이 바로 앵커드 포지션에 할당
-            gazeCursor.anchoredPosition = pos;
+            gazeCursor.anchoredPosition = screenPos;
         }
 
         // ── 이하 기존 로직 유지 ──
@@ -144,35 +148,125 @@ public class UiController : MonoBehaviour
         if (logTimer >= 1f)
         {
             logTimer = 0f;
-            Debug.Log($"[Gaze] norm=({gaze.X:F3},{gaze.Y:F3}) → mapped px=({pos.x:F0},{pos.y:F0})");
+            Debug.Log($"[Gaze] norm=({gaze.X:F3},{gaze.Y:F3}) → mapped px=({screenPos.x:F0},{screenPos.y:F0})");
         }
 
-        // UI Raycast & 확대/축소 등…
-        // (필요하다면 raycaster.Raycast에 사용할 포지션도 pos로 교체)
-        foreach (var target in uiTargets)
+
+        DetectUI(screenPos);
+    }
+
+    private void DetectUI(Vector2 screenPos)
+    {
+        if (gazeCursor != null)
         {
-            if (target == null)
-                continue;
+            gazeCursor.anchoredPosition = screenPos;
 
-            // RectTransform의 월드 좌표를 화면 좌표로 변환 (Overlay 모드일 때 카메라 파라미터는 무시됨)
-            Vector2 targetScreenPos = RectTransformUtility.WorldToScreenPoint(null, target.position);
+            // ── 커서 주변 UI 감지
+            Vector2 cursorScreenPos = RectTransformUtility.WorldToScreenPoint(raycaster.eventCamera, gazeCursor.position);
 
-            // 시선과 대상 간 거리 계산
-            float dist = Vector2.Distance(pos, targetScreenPos);
-            Debug.Log(dist);
+            Vector2[] offsets = new Vector2[]
+            {
+            Vector2.zero,
+            Vector2.left * detectionRadius,
+            Vector2.right * detectionRadius,
+            Vector2.up * detectionRadius,
+            Vector2.down * detectionRadius,
+            new Vector2(-detectionRadius, -detectionRadius),
+            new Vector2(detectionRadius, -detectionRadius),
+            new Vector2(-detectionRadius, detectionRadius),
+            new Vector2(detectionRadius, detectionRadius),
+            };
 
-            // 반경 이내면 focusScale, 아니면 1
-            float goalScale = dist <= influenceRadius ? focusScale : 1f;
+            HashSet<GameObject> detectedThisFrame = new();
 
-            // 부드러운 크기 보간
-            Vector3 baseScale = target.localScale;
-            target.localScale = Vector3.Lerp(
-                target.localScale,
-                baseScale * goalScale,
-                Time.deltaTime * lerpSpeed
-            );
+            foreach (var offset in offsets)
+            {
+                Vector2 samplePos = cursorScreenPos + offset;
+                PointerEventData eventData = new PointerEventData(eventSystem) { position = samplePos };
+                List<RaycastResult> results = new List<RaycastResult>();
+                raycaster.Raycast(eventData, results);
+
+                foreach (var result in results)
+                {
+                    GameObject go = result.gameObject;
+                    if (go != gazeCursor.gameObject)
+                    {
+                        detectedThisFrame.Add(go);
+                    }
+                }
+            }
+
+            // 감지된 UI 로그 출력
+            foreach (var go in detectedThisFrame)
+            {
+                Debug.Log($"[UI 감지] 커서 주변 UI: {go.name}");
+            }
+
+            // 감지된 UI 처리
+            HandleDetectedUI(detectedThisFrame);
         }
     }
+
+    private void HandleDetectedUI(HashSet<GameObject> detected)
+    {
+        foreach (var go in detected)
+        {
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt == null) continue;
+
+            // 감지되었으므로 타이머 갱신
+            gazeStayTimers[go] = stayTime;
+
+            // 즉시 확대
+            rt.localScale = Vector3.Lerp(rt.localScale, Vector3.one * focusScale, Time.unscaledDeltaTime * lerpSpeed);
+
+            // 이미지 컴포넌트가 있으면 불투명하게
+            var img = go.GetComponent<Image>();
+            if (img != null)
+            {
+                Color c = img.color;
+                c.a = 1f;
+                img.color = c;
+            }
+
+            currentlyFocused.Add(go);
+        }
+
+        // 감지되지 않은 UI 처리
+        var keys = new List<GameObject>(gazeStayTimers.Keys);
+        foreach (var go in keys)
+        {
+            if (!detected.Contains(go))
+            {
+                gazeStayTimers[go] -= Time.unscaledDeltaTime;
+
+                RectTransform rt = go.GetComponent<RectTransform>();
+                if (rt == null) continue;
+
+                // 스케일 되돌리기
+                rt.localScale = Vector3.Lerp(rt.localScale, Vector3.one, Time.unscaledDeltaTime * lerpSpeed);
+
+                // 스케일 거의 1이면 → 반투명 처리 & 정리
+                if (Vector3.Distance(rt.localScale, Vector3.one) < 0.01f)
+                {
+                    rt.localScale = Vector3.one;
+
+                    var img = go.GetComponent<Image>();
+                    if (img != null)
+                    {
+                        Color c = img.color;
+                        c.a = 0.1f;
+                        img.color = c;
+                    }
+
+                    gazeStayTimers.Remove(go);
+                    currentlyFocused.Remove(go);
+                }
+            }
+        }
+    }
+
+
 
     void OnApplicationQuit()
     {
