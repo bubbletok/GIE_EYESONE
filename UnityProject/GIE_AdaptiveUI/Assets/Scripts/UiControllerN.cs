@@ -243,40 +243,53 @@ public class UiControllerN : MonoBehaviour
             }
 
             // (C) 아이콘/타겟 모두 커서에 겹치지 않을 때
-            if (targetGO != null && stayTimers.TryGetValue(targetGO, out float remain))
+            if (targetGO != null && targetRT != null)
             {
-                // 머무름 타이머 감소
-                remain -= Time.unscaledDeltaTime;
-                if (remain > 0f)
+                // 1) stayTime이 남아 있으면 타이머만 깎고 원본 크기 유지
+                if (stayTimers.TryGetValue(targetGO, out float remain))
                 {
-                    stayTimers[targetGO] = remain;
-                    // 머무름 중에는 타겟 유지, 크기 고정(원본)
-                    if (targetGO.activeSelf && targetRT != null)
+                    remain -= Time.unscaledDeltaTime;
+                    if (remain > 0f)
                     {
-                        Vector2 original = originalSizes.ContainsKey(targetGO) ? originalSizes[targetGO] : targetRT.sizeDelta;
-                        targetRT.sizeDelta = Vector2.Lerp(targetRT.sizeDelta, original, Time.unscaledDeltaTime * p.lerpSpeed);
-                    }
-                    continue;
-                }
-                else
-                {
-                    // 타이머 만료: 타겟 크기 원본->sizeOut 보간 시작
-                    stayTimers.Remove(targetGO);
-                    if (targetGO.activeSelf && targetRT != null)
-                    {
-                        // 현재 상태(즉, 이전 프레임에 보간된 크기)에서 sizeOut으로 한 걸음씩 줄여나감
-                        targetRT.sizeDelta = Vector2.Lerp(
-                            targetRT.sizeDelta,   // ← 현재 프레임의 크기
-                            p.sizeOut,            // ← 축소할 목표 크기
-                            Time.unscaledDeltaTime * p.lerpSpeed
-                        );
-
-                        // 충분히 작아졌으면, 최종적으로 sizeOut으로 설정하고 비활성화
-                        if (Vector2.Distance(targetRT.sizeDelta, p.sizeOut) < 0.01f)
+                        stayTimers[targetGO] = remain;
+                        if (targetGO.activeSelf)
                         {
-                            targetRT.sizeDelta = p.sizeOut;
-                            targetGO.SetActive(false);
-                            // … (아이콘 복귀 로직) …
+                            // 원본 크기로 부드럽게 유지 (Grow 시 남아도는 interpolation 방지)
+                            Vector2 original = originalSizes[targetGO];
+                            targetRT.sizeDelta = Vector2.MoveTowards(
+                                targetRT.sizeDelta,
+                                original,
+                                p.lerpSpeed * Time.unscaledDeltaTime
+                            );
+                        }
+                        continue;
+                    }
+                    else
+                    {
+                        // 타이머 만료 → stayTimers에서 제거하고 Shrink 모드로 진입
+                        stayTimers.Remove(targetGO);
+                    }
+                }
+
+                // 2) Shrink 모드: sizeOut까지 부드럽게 줄이기
+                if (targetGO.activeSelf)
+                {
+                    float step = p.lerpSpeed *150f* Time.unscaledDeltaTime;
+                    targetRT.sizeDelta = Vector2.MoveTowards(
+                        targetRT.sizeDelta,
+                        p.sizeOut,
+                        step
+                    );
+
+                    // sizeOut에 도달하면 비활성화 및 아이콘 복귀
+                    if (Vector2.Distance(targetRT.sizeDelta, p.sizeOut) < 0.01f)
+                    {
+                        targetRT.sizeDelta = p.sizeOut;
+                        targetGO.SetActive(false);
+                        if (iconGO != null)
+                        {
+                            iconGO.SetActive(true);
+                            SetAlpha(iconGO, 0.3f);
                         }
                     }
                     continue;
