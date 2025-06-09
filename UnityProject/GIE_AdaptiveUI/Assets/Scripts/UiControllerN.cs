@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
@@ -44,6 +45,13 @@ public class UiControllerN : MonoBehaviour
     // 머무름 타이머 저장
     private Dictionary<GameObject, float> stayTimers = new Dictionary<GameObject, float>();
 
+    // 추가: 전체 세션 시간
+    private float totalGazeTime = 0f;
+    // 추가: UI별 머문 시간(초)
+    private Dictionary<string, float> gazeDurations = new Dictionary<string, float>();
+    // 추가: 로그 파일 경로
+    private string logFilePath;
+
     void Awake()
     {
         if (raycaster == null)
@@ -84,10 +92,29 @@ public class UiControllerN : MonoBehaviour
         RefreshTrackWindow();
 
         //Time.timeScale = 0.1f;
+
+#if UNITY_EDITOR
+        // 에디터에서는 Assets/Scripts 폴더 아래에 저장
+        logFilePath = Path.Combine(Application.dataPath, "Scripts", "GazeLog.txt");
+#else
+        // 빌드에서는 사용자 Downloads 폴더에 저장
+        // Windows/Mac/Linux 공통: 사용자 홈 디렉터리 + "Downloads"
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string downloads = Path.Combine(home, "Downloads");
+        logFilePath = Path.Combine(downloads, "GazeLog.txt");
+#endif
+
+        // 파일 쓰기
+        File.WriteAllText(logFilePath, $"# Gaze Log ({DateTime.Now:s})\n");
+        File.AppendAllText(logFilePath, "TotalTime,Seconds\n");
+        File.AppendAllText(logFilePath, "TargetName,Seconds\n");
+
+        Debug.Log($"[GazeLog] 저장 위치: {logFilePath}");
     }
 
     void Update()
     {
+        totalGazeTime += Time.unscaledDeltaTime;
         Vector2 screenPos;
 
         if (simulateWithMouse)
@@ -96,22 +123,28 @@ public class UiControllerN : MonoBehaviour
             if (gazeCursor != null)
                 gazeCursor.anchoredPosition = screenPos;
             UpdateUiPatches(screenPos);
+            Debug.Log("mouse screenpos " + screenPos);
             return;
         }
 
-        if (!trackerAvailable) return;
+        if (!trackerAvailable)
+        {
+            RefreshTrackWindow();
+        }
         TobiiGameIntegrationApi.Update();
         if (!TobiiGameIntegrationApi.IsTrackerConnected()) return;
         if (!TobiiGameIntegrationApi.IsPresent()) return;
 
         if (TobiiGameIntegrationApi.TryGetLatestGazePoint(out var gaze))
         {
-            float mappedX = gaze.X * Screen.width;
-            float mappedY = gaze.Y * Screen.height;
+            Debug.Log("gaze " + gaze.X + " " + gaze.Y);
+            float mappedX = Screen.width / 2 + (gaze.X * Screen.width / 2);
+            float mappedY = Screen.height / 2 + (gaze.Y * Screen.height / 2);
             screenPos = new Vector2(mappedX, mappedY);
             if (gazeCursor != null)
                 gazeCursor.anchoredPosition = screenPos;
             UpdateUiPatches(screenPos);
+            Debug.Log("screenpos "+screenPos);
         }
     }
 
@@ -120,22 +153,29 @@ public class UiControllerN : MonoBehaviour
         TobiiGameIntegrationApi.Update();
         TobiiGameIntegrationApi.UpdateTrackerInfos();
         var infos = TobiiGameIntegrationApi.GetTrackerInfos();
+        Debug.Log($"[Tobii] Found {infos?.Count ?? 0} tracker(s)");
+
         if (infos == null || infos.Count == 0)
         {
+            Debug.LogError("[Tobii] No tracker infos – is Core Runtime running?");
             trackerAvailable = false;
             return;
         }
+
         IntPtr hwnd = GetForegroundWindow();
+        Debug.Log($"[Tobii] Foreground HWND: {hwnd}");
         if (hwnd != IntPtr.Zero)
-        {
             trackerAvailable = TobiiGameIntegrationApi.TrackWindow(hwnd);
-        }
+        Debug.Log($"[Tobii] TrackWindow returned {trackerAvailable}");
+
         if (!trackerAvailable)
         {
-            var first = infos[0];
-            trackerAvailable = TobiiGameIntegrationApi.TrackTracker(first.Url);
+            var url = infos[0].Url;
+            trackerAvailable = TobiiGameIntegrationApi.TrackTracker(url);
+            Debug.Log($"[Tobii] TrackTracker({url}) returned {trackerAvailable}");
         }
     }
+
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -170,11 +210,20 @@ public class UiControllerN : MonoBehaviour
         raycaster.Raycast(pointerData, results);
         var hitSet = new HashSet<GameObject>();
         foreach (var r in results)
-            hitSet.Add(r.gameObject);
+            hitSet.Add(r.gameObject);   
 
         // 2) 각 패치별 처리
         foreach (var p in uiPatches)
         {
+            string targetName = p.uiTarget.name;
+            if ((p.uiIcon != null && hitSet.Contains(p.uiIcon)) ||
+                (p.uiTarget != null && hitSet.Contains(p.uiTarget)))
+            {
+                if (!gazeDurations.ContainsKey(targetName))
+                    gazeDurations[targetName] = 0f;
+                gazeDurations[targetName] += Time.unscaledDeltaTime;
+            }
+
             GameObject iconGO = p.uiIcon;
             GameObject targetGO = p.uiTarget;
 
@@ -328,6 +377,15 @@ public class UiControllerN : MonoBehaviour
 
     void OnApplicationQuit()
     {
+        using (var sw = new StreamWriter(logFilePath, true))
+        {
+            sw.WriteLine($"{totalGazeTime:F3}");          // 총 머문 시간
+            foreach (var kv in gazeDurations)
+            {
+                sw.WriteLine($"{kv.Key},{kv.Value:F3}");
+            }
+        }
+
         TobiiGameIntegrationApi.StopTracking();
         TobiiGameIntegrationApi.Shutdown();
     }

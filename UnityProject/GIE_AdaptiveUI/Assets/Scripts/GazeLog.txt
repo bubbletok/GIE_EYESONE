@@ -1,0 +1,8 @@
+# Gaze Log (2025-06-09T14:18:24)
+TotalTime,Seconds
+TargetName,Seconds
+19.874
+레벨?,0.162
+주요정보,0.908
+기타정보,0.054
+Minimap,0.924
