@@ -1,4 +1,0 @@
-# Gaze Log (2025-06-09T23:16:18)
-TotalTime,Seconds
-TargetName,Seconds
-17.240

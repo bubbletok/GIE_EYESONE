@@ -1,0 +1,27 @@
+{
+    "timestamp": "2025-06-11T01:56:28",
+    "hidingMode": "None",
+    "totalTime": 42.314388275146487,
+    "targets": [
+        {
+            "targetName": "Minimap",
+            "duration": 0.07367350161075592
+        },
+        {
+            "targetName": "기타정보",
+            "duration": 0.09116670489311218
+        },
+        {
+            "targetName": "Icons",
+            "duration": 0.0
+        },
+        {
+            "targetName": "주요정보",
+            "duration": 1.3235806226730347
+        },
+        {
+            "targetName": "레벨",
+            "duration": 33.10252380371094
+        }
+    ]
+}

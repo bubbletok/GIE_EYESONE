@@ -6,6 +6,24 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/MMORPG_Test.unity
-    guid: 5c5b2e27b38fe504e8175158c0df96b3
+    path: Assets/Scenes/Experiments/Experiment_Main.unity
+    guid: 9ac5622d7287ea147aeadef98ae88353
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment#0_None.unity
+    guid: 51700332827386e4b97c129b99c6abed
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment#1_Mixed.unity
+    guid: 9c9110a6dd8014c4480d1778227ae736
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment#2_Transparent.unity
+    guid: 30211c69058b7d945aec935a508c844a
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment#3_Icon.unity
+    guid: 80c9fcba0f2a82d48ab37ee3f8612663
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment#4_Scale.unity
+    guid: 256c8afb8a1b9e846b7069383b6bba4e
+  - enabled: 1
+    path: Assets/Scenes/Experiments/Experiment_End.unity
+    guid: fbbc9c0f9ba0d894bb344a86c87a1dbc
   m_configObjects: {}
