@@ -114,23 +114,47 @@ public class UiController : MonoBehaviour
     void Update()
     {
         totalGazeTime += Time.unscaledDeltaTime;
+        Vector2 screenPos;
 
-        Vector2 screenPos = simulateWithMouse ? GetMousePosition() : GetGazePosition();
-        if (gazeCursor != null && screenPos != new Vector2(-1, -1))
+        if (simulateWithMouse)
         {
-            // Debug.Log("Gaze Cursor anchoredPosition: " + gazeCursor.anchoredPosition);
-            // Debug.Log($"Gaze cursor screen position: {screenPos}");
-            var newPos = Vector2.Lerp(
-                gazeCursor.anchoredPosition,
-                screenPos,
-                Time.deltaTime * ExperimentManager.Instance.GazeMovementLerp // 보간 속도 조절 (값이 클수록 빠르게 이동)
-            );
-            // var newPos = screenPos;
-            // Debug.Log($"Gaze cursor new position: {newPos}");
-            gazeCursor.anchoredPosition = newPos;
-            UpdateUiByMode(newPos);
+            screenPos = Input.mousePosition;
+            if (gazeCursor != null)
+                gazeCursor.anchoredPosition = screenPos;
+            UpdateUiByMode(screenPos);
+            Debug.Log("mouse screenpos " + screenPos);
+            return;
         }
-        else if (simulateWithMouse) UpdateUiByMode(screenPos);
+
+        if (!trackerAvailable)
+        {
+            RefreshTrackWindow();
+        }
+        TobiiGameIntegrationApi.Update();
+        if (!TobiiGameIntegrationApi.IsTrackerConnected()) return;
+        if (!TobiiGameIntegrationApi.IsPresent()) return;
+
+        if (TobiiGameIntegrationApi.TryGetLatestGazePoint(out var gaze))
+        {
+            Debug.Log("gaze " + gaze.X + " " + gaze.Y);
+            Resolution resolution = Screen.currentResolution;
+            float mappedX = resolution.width / 2 + (gaze.X * (resolution.width / 2));
+            float mappedY = resolution.height / 2 + ((gaze.Y * resolution.height / 2));
+            float add = 0f;
+            if (mappedY > 0)
+            {
+                add = 30 * gaze.Y;
+            }
+            else
+            {
+                add = 30 * gaze.Y;
+            }
+                screenPos = new Vector2(mappedX, mappedY+add);
+            if (gazeCursor != null)
+                gazeCursor.anchoredPosition = screenPos;
+            UpdateUiByMode(screenPos);
+            Debug.Log("screenpos " + screenPos);
+        }
     }
 
     private void OnDestroy()
