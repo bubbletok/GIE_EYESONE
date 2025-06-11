@@ -4139,7 +4139,7 @@ MonoBehaviour:
     lerpSpeed: 20
     boldRadius: 100
   simulateWithMouse: 0
-  currentMode: 1
+  currentMode: 2
 --- !u!114 &773075618
 MonoBehaviour:
   m_ObjectHideFlags: 0
