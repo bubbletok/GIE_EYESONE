@@ -264,8 +264,10 @@ public class UiController : MonoBehaviour
             gaze.Y *= ExperimentManager.Instance.GazeSensitivityY;
             Debug.Log($"[Tobii] Gaze point: {gaze.X}, {gaze.Y} (sensitivity: {ExperimentManager.Instance.GazeSensitivityX}, {ExperimentManager.Instance.GazeSensitivityY})");
             Debug.Log($"[Tobii] Current Resolution {currentResolution.width}x{currentResolution.height}");
-            float mappedX = Screen.width / 2 + (gaze.X * currentResolution.width / 2);
-            float mappedY = Screen.height / 2 + (gaze.Y * currentResolution.height / 2);
+            float mappedX = currentResolution.width / 2 + (gaze.X * currentResolution.width / 2);
+            float mappedY = currentResolution.height / 2 + (gaze.Y * currentResolution.height / 2);
+            // mappedX += ExperimentManager.Instance.GazeOffsetX;
+            // mappedY += ExperimentManager.Instance.GazeOffsetY;
             mappedX = Mathf.Clamp(mappedX, 0, currentResolution.width) + ExperimentManager.Instance.GazeOffsetX;
             mappedY = Mathf.Clamp(mappedY, 0, currentResolution.height) + ExperimentManager.Instance.GazeOffsetY;
             Debug.Log($"[Tobii] Mapped gaze position: {mappedX}, {mappedY}, offset ({ExperimentManager.Instance.GazeOffsetX}, {ExperimentManager.Instance.GazeOffsetY})");
