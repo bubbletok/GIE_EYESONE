@@ -137,6 +137,8 @@ public class UiController : MonoBehaviour
         if (TobiiGameIntegrationApi.TryGetLatestGazePoint(out var gaze))
         {
             Debug.Log("gaze " + gaze.X + " " + gaze.Y);
+            gaze.X *= ExperimentManager.Instance.GazeSensitivityX;
+            gaze.Y *= ExperimentManager.Instance.GazeSensitivityY;
             Resolution resolution = Screen.currentResolution;
             float mappedX = resolution.width / 2 + (gaze.X * (resolution.width / 2));
             float mappedY = resolution.height / 2 + ((gaze.Y * resolution.height / 2));
@@ -149,7 +151,7 @@ public class UiController : MonoBehaviour
             {
                 add = 30 * gaze.Y;
             }
-                screenPos = new Vector2(mappedX, mappedY+add);
+            screenPos = new Vector2(mappedX, mappedY + add);
             if (gazeCursor != null)
                 gazeCursor.anchoredPosition = screenPos;
             UpdateUiByMode(screenPos);
