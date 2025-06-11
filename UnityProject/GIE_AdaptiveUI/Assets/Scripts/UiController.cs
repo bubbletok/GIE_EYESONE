@@ -128,7 +128,7 @@ public class UiController : MonoBehaviour
             // var newPos = screenPos;
             // Debug.Log($"Gaze cursor new position: {newPos}");
             gazeCursor.anchoredPosition = newPos;
-            UpdateUiByMode(screenPos);
+            UpdateUiByMode(newPos);
         }
         else if (simulateWithMouse) UpdateUiByMode(screenPos);
     }
